@@ -1,0 +1,59 @@
+# src/controllers/ventas_controller.py
+from datetime import datetime
+from src.utils.db_helper import DatabaseHelper
+from src.utils.report_generator import ReportGenerator
+
+class VentasController:
+    def __init__(self):
+        self.db = DatabaseHelper()
+        self.report_generator = ReportGenerator()
+
+    def registrar_venta(self, id_cliente, id_empleado, sale_items):
+        try:
+            total = sum(item["cantidad"] * 10.0 for item in sale_items)
+
+            ticket_query = """
+                INSERT INTO Ticket (Fecha_Hora, ID_Empleado, ID_Cliente, Total)
+                VALUES (%s, %s, %s, %s)
+            """
+            fecha_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ticket_params = (fecha_hora, id_empleado, id_cliente, total)
+            self.db.execute_query(ticket_query, ticket_params)
+
+            ticket_id_query = "SELECT LAST_INSERT_ID()"
+            ticket_id_result = self.db.fetch_query(ticket_id_query)
+            id_ticket = ticket_id_result[0][0]
+
+            for item in sale_items:
+                id_producto = item["id_producto"]
+                cantidad = item["cantidad"]
+                precio_unitario = 10.0
+                subtotal = cantidad * precio_unitario
+
+                detalle_query = """
+                    INSERT INTO Detalle_Ticket (ID_Ticket, ID_Producto, Cantidad, Precio_Unitario, Subtotal)
+                    VALUES (%s, %s, %s, %s, %s)
+                """
+                detalle_params = (id_ticket, id_producto, cantidad, precio_unitario, subtotal)
+                self.db.execute_query(detalle_query, detalle_params)
+
+                stock_query = "UPDATE Producto SET Stock = Stock - %s WHERE ID_Producto = %s"
+                stock_params = (cantidad, id_producto)
+                self.db.execute_query(stock_query, stock_params)
+
+            ticket_data = {
+                "id_ticket": id_ticket,
+                "fecha_hora": fecha_hora,
+                "id_empleado": id_empleado,
+                "id_cliente": id_cliente,
+                "total": total
+            }
+            pdf_path = self.report_generator.generate_ticket_pdf(ticket_data, sale_items)
+            print(f"Ticket PDF generado en: {pdf_path}")
+
+            return {"id_ticket": id_ticket, "total": total, "pdf_path": pdf_path}
+        except Exception as e:
+            raise Exception(f"Error al registrar la venta: {str(e)}")
+
+    def close(self):
+        self.db.close()
