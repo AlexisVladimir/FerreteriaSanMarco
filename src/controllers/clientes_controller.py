@@ -10,7 +10,6 @@ class ClientesController:
         query = "INSERT INTO cliente (Nombre, Contacto, Direccion) VALUES (%s, %s, %s)"
         params = (nombre, contacto, direccion)
         if self.db.execute_query(query, params):
-            # En una implementación completa se recuperaría el ID generado.
             return Cliente(None, nombre, contacto, direccion)
         else:
             return None
@@ -29,6 +28,11 @@ class ClientesController:
         query = "DELETE FROM cliente WHERE ID_Cliente=%s"
         params = (id_cliente,)
         return self.db.execute_query(query, params)
+
+    def obtener_historial_compras(self, id_cliente):
+        query = "SELECT ID_Ticket, Fecha_Hora, Total FROM Ticket WHERE ID_Cliente = %s ORDER BY Fecha_Hora DESC"
+        data = self.db.fetch_query(query, (id_cliente,))
+        return [{"id_ticket": row[0], "fecha_hora": row[1], "total": row[2]} for row in data]
 
     def close(self):
         self.db.close()

@@ -7,83 +7,128 @@ class InventarioController:
     def __init__(self):
         self.db = DatabaseHelper()
 
-    # ==============================
-    # OPERACIONES CRUD BÁSICAS
-    # ==============================
-
+    # src/controllers/inventario_controller.py
     def get_all_products(self):
-        """Obtener todos los productos con información relacionada"""
+        # En el método get_all_products
         query = """
             SELECT 
                 p.ID_Producto, 
                 p.Nombre, 
                 p.Descripcion, 
-                IFNULL(s.Nombre, 'Sin Subcategoría') AS Subcategoria,
-                IFNULL(c.Nombre, 'Sin Categoría') AS Categoria, 
+                p.ID_Subcategoria,
+                s.Nombre AS Subcategoria,
                 p.Stock, 
-                p.Precio_Publico, 
-                IFNULL(u.Descripcion, 'Sin Ubicación') AS Ubicacion,
-                IFNULL(pr.Nombre, 'Sin Proveedor') AS Proveedor,
-                IFNULL(p.Fecha_Ingreso, 'Sin Fecha') AS Fecha_Ingreso
+                p.Precio_Publico AS Precio_Unitario,  # Usar alias para mantener consistencia
+                u.Descripcion AS Ubicacion
             FROM Producto p
             LEFT JOIN Subcategoria s ON p.ID_Subcategoria = s.ID_Subcategoria
-            LEFT JOIN Categoria c ON s.ID_Categoria = c.ID_Categoria
             LEFT JOIN Ubicacion u ON p.ID_Ubicacion = u.ID_Ubicacion
-            LEFT JOIN Producto_Proveedor pp ON p.ID_Producto = pp.ID_Producto
-            LEFT JOIN Proveedor pr ON pp.ID_Proveedor = pr.ID_Proveedor
-            ORDER BY p.ID_Producto
         """
         try:
-            products = self.db.fetch_query(query)
+            results = self.db.fetch_query(query)
             return [{
                 "id_producto": item[0],
                 "nombre": item[1],
-                "descripcion": item[2] if item[2] else "Sin descripción",
-                "subcategoria": item[3],
-                "categoria": item[4],
+                "descripcion": item[2],
+                "id_subcategoria": item[3],  # ID de la subcategoría
+                "subcategoria": item[4],  # Nombre de la subcategoría
                 "stock": item[5],
-                "precio_unitario": float(item[6]) if item[6] else 0.0,
-                "ubicacion": item[7],
-                "proveedor": item[8] if item[8] else "Sin proveedor",
-                "fecha_ingreso": item[9].strftime('%Y-%m-%d') if isinstance(item[9], datetime) else item[9]
-            } for item in products]
+                "precio_unitario": item[6],
+                "ubicacion": item[7]
+            } for item in results]
         except Exception as e:
-            print(f"Error al obtener productos: {str(e)}")
+            print(f"Error al consultar datos: {e}")
             return []
 
-    def agregar_producto(self, nombre, descripcion, categoria, cantidad, precio, ubicacion, fecha):
+    def get_subcategorias(self):
+        query = "SELECT ID_Subcategoria, Nombre FROM Subcategoria"
+        try:
+            results = self.db.fetch_query(query)
+            return [{"id": item[0], "nombre": item[1]} for item in results]
+        except Exception as e:
+            print(f"Error al obtener subcategorías: {e}")
+            return []
+
+    def agregar_producto(self, nombre, descripcion, categoria, cantidad, precio, ubicacion, fecha=None,producto_id=None):
         """Agregar un nuevo producto al inventario"""
         if not nombre or not cantidad or not precio:
             return False, "Nombre, cantidad y precio son campos obligatorios"
 
         try:
+            # Validar ID si fue proporcionado
+            if producto_id is not None:
+                if self._producto_existe(producto_id):
+                    return False, f"El ID {producto_id} ya está en uso"
+                if producto_id <= 0:
+                    return False, "El ID debe ser un número positivo"
+            else:
+                producto_id = self._get_next_product_id()
+
+            # Resto de validaciones...
+            if int(cantidad) < 0:
+                return False, "La cantidad no puede ser negativa"
+            if float(precio) <= 0:
+                return False, "El precio debe ser mayor que cero"
+
             query = """
                 INSERT INTO Producto (
+                    ID_Producto,
                     Nombre, 
                     Descripcion, 
                     ID_Subcategoria, 
                     Stock, 
-                    Precio_Unitario, 
-                    ID_Ubicacion, 
+                    Precio_Publico, 
+                    ID_Ubicacion,
                     Fecha_Ingreso
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """
             params = (
+                producto_id,
                 nombre.strip(),
                 descripcion.strip() if descripcion else None,
-                int(categoria) if categoria else None,
+                int(categoria),
                 int(cantidad),
                 float(precio),
-                int(ubicacion) if ubicacion else None,
+                int(ubicacion),
                 fecha if fecha else None
             )
+
             self.db.execute_query(query, params)
-            return True, "Producto agregado correctamente"
-        except ValueError:
-            return False, "Por favor ingrese valores numéricos válidos para cantidad, precio y ubicación"
+            return True, f"Producto agregado correctamente con ID {producto_id}"
+
+        except ValueError as e:
+            return False, f"Error en los valores numéricos: {str(e)}"
         except Exception as e:
             print(f"Error al agregar producto: {str(e)}")
             return False, f"Error al agregar producto: {str(e)}"
+
+    def _get_next_product_id(self):
+        """Obtener el próximo ID disponible para producto"""
+        query = "SELECT MAX(ID_Producto) FROM Producto"
+        result = self.db.fetch_query(query)
+        return (result[0][0] or 0) + 1 if result else 1
+
+    def get_ubicaciones(self):
+        """Obtiene todas las ubicaciones disponibles (ID + Descripción)"""
+        query = "SELECT ID_Ubicacion, Descripcion FROM Ubicacion ORDER BY Descripcion"
+        try:
+            results = self.db.fetch_query(query)
+            return [{"id": item[0], "descripcion": item[1]} for item in results]
+        except Exception as e:
+            print(f"Error al obtener ubicaciones: {e}")
+            return []
+
+    def _subcategoria_existe(self, subcategoria_id):
+        """Verificar si una subcategoría existe"""
+        query = "SELECT COUNT(*) FROM Subcategoria WHERE ID_Subcategoria = %s"
+        result = self.db.fetch_query(query, (subcategoria_id,))
+        return result and result[0][0] > 0
+
+    def _ubicacion_existe(self, ubicacion_id):
+        """Verificar si una ubicación existe"""
+        query = "SELECT COUNT(*) FROM Ubicacion WHERE ID_Ubicacion = %s"
+        result = self.db.fetch_query(query, (ubicacion_id,))
+        return result and result[0][0] > 0
 
     def actualizar_producto(self, producto_id, nombre, descripcion, categoria, cantidad, precio, ubicacion, fecha):
         """Actualizar un producto existente"""
@@ -95,7 +140,7 @@ class InventarioController:
                     Descripcion = %s,
                     ID_Subcategoria = %s,
                     Stock = %s,
-                    Precio_Unitario = %s,
+                    Precio_Publico = %s,  # Cambiado a Precio_Publico
                     ID_Ubicacion = %s,
                     Fecha_Ingreso = %s
                 WHERE ID_Producto = %s
@@ -125,22 +170,25 @@ class InventarioController:
             if not self._producto_existe(producto_id):
                 return False, "El producto no existe"
 
-            # Verificar relaciones con otras tablas
-            tablas_relacionadas = self._verificar_relaciones_producto(producto_id)
-            if tablas_relacionadas:
-                return False, f"No se puede eliminar, el producto tiene registros relacionados en: {', '.join(tablas_relacionadas)}"
+            # Primero eliminar todas las relaciones
+            tablas_relacionadas = [
+                "Producto_Proveedor", "Tornillo", "Pija", "Tuerca",
+                "Birlo", "Seguro", "Clip_Push", "Movimiento",
+                "Detalle_Pedido_Proveedor", "Detalle_Ticket", "Devolucion"
+            ]
 
-            # Si no hay problemas, proceder con la eliminación
+            for tabla in tablas_relacionadas:
+                query = f"DELETE FROM {tabla} WHERE ID_Producto = %s"
+                self.db.execute_query(query, (producto_id,))
+
+            # Luego eliminar el producto
             query = "DELETE FROM Producto WHERE ID_Producto = %s"
             self.db.execute_query(query, (producto_id,))
+
             return True, "Producto eliminado correctamente"
         except Exception as e:
             print(f"Error al eliminar producto: {str(e)}")
             return False, f"Error al eliminar producto: {str(e)}"
-
-    # ==============================
-    # FUNCIONES DE BÚSQUEDA
-    # ==============================
 
     def buscar_productos(self, filtro, valor):
         """Buscar productos según criterio especificado"""
@@ -152,7 +200,7 @@ class InventarioController:
                 p.ID_Producto, 
                 p.Nombre, 
                 IFNULL(s.Nombre, 'Sin Subcategoría') AS Subcategoria,
-                p.Precio_Unitario, 
+                p.Precio_Publico,  -- Cambiado de Precio_Unitario a Precio_Publico
                 p.Stock, 
                 IFNULL(u.Descripcion, 'Sin Ubicación') AS Ubicacion
             FROM Producto p
@@ -254,10 +302,6 @@ class InventarioController:
         except Exception as e:
             print(f"Error al buscar birlos compatibles: {str(e)}")
             return []
-
-    # ==============================
-    # FUNCIONES PRIVADAS DE APOYO
-    # ==============================
 
     def _producto_existe(self, producto_id):
         """Verificar si un producto existe en la base de datos"""

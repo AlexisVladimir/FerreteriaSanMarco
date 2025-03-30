@@ -15,7 +15,6 @@ class EmpleadosController:
         """
         params = (nombre_completo, cargo, telefono, correo, fecha_ingreso, hashed_pass)
         if self.db.execute_query(query, params):
-            # Se podría recuperar el ID autogenerado; aquí se retorna None para el ID.
             return Empleado(None, nombre_completo, cargo, telefono, correo, fecha_ingreso, hashed_pass)
         else:
             return None
@@ -27,7 +26,6 @@ class EmpleadosController:
 
     def editar_empleado(self, id_empleado, nombre_completo, cargo, telefono, correo, fecha_ingreso, contrasena=None):
         if contrasena and contrasena.strip():
-            # Si se proporciona nueva contraseña, se genera el hash
             hashed_pass = generar_hash(contrasena)
             query = """
                 UPDATE empleado 
@@ -48,6 +46,11 @@ class EmpleadosController:
         query = "DELETE FROM empleado WHERE ID_Empleado=%s"
         params = (id_empleado,)
         return self.db.execute_query(query, params)
+
+    def obtener_historial_ventas(self, id_empleado):
+        query = "SELECT ID_Ticket, Fecha_Hora, Total FROM Ticket WHERE ID_Empleado = %s ORDER BY Fecha_Hora DESC"
+        data = self.db.fetch_query(query, (id_empleado,))
+        return [{"id_ticket": row[0], "fecha_hora": row[1], "total": row[2]} for row in data]
 
     def close(self):
         self.db.close()

@@ -1,3 +1,6 @@
+#que pedo porque tengo 2
+#talvez lo guardaste por si acaso no jalaba uno
+# no voy a mover nada de este es un
 # src/views/reportes_view.py
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *

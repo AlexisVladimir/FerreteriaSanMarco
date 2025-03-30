@@ -29,8 +29,9 @@ class VentasController:
             total = sum(item["cantidad"] * 10.0 for item in sale_items)
             print(f"Total calculado: {total}")
 
-            # Iniciar una transacción
-            self.db.connection.start_transaction()
+            # Iniciar una transacción solo si no hay una en curso
+            if not self.db.connection.in_transaction:
+                self.db.connection.start_transaction()
             print("Transacción iniciada.")
 
             # Insertar el ticket
@@ -100,7 +101,6 @@ class VentasController:
             # Revertir la transacción en caso de error
             self.db.connection.rollback()
             print(f"Transacción revertida debido a un error: {str(e)}")
-            # Asegurarnos de que el mensaje de error sea claro
             error_message = f"Error al registrar la venta: {str(e)}"
             raise Exception(error_message)
 

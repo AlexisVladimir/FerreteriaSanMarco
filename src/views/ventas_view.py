@@ -50,15 +50,18 @@ class VentasView:
 
         button_frame = ttk.Frame(self.ventas_frame, padding=10)
         button_frame.pack(fill="x")
-        ttk.Button(button_frame, text="Agregar Producto",
-                   command=self.agregar_producto, bootstyle="success").pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Finalizar Venta",
-                   command=self.finalizar_venta, bootstyle="primary").pack(side="right", padx=5)
+        ttk.Button(button_frame, text="Agregar Producto", command=self.agregar_producto, bootstyle="success").pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Eliminar Producto", command=self.eliminar_producto, bootstyle="danger").pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Finalizar Venta", command=self.finalizar_venta, bootstyle="primary").pack(side="right", padx=5)
 
         self.sale_table = ttk.Treeview(self.ventas_frame, columns=("ID Producto", "Cantidad"), show="headings")
         self.sale_table.heading("ID Producto", text="ID Producto")
         self.sale_table.heading("Cantidad", text="Cantidad")
         self.sale_table.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Label para mostrar el total a pagar
+        self.total_label = ttk.Label(self.ventas_frame, text="Total a pagar: $0.00", font=("Helvetica", 14))
+        self.total_label.pack(pady=10)
 
     def agregar_producto(self):
         id_producto = self.id_producto_entry.get().strip()
@@ -80,11 +83,26 @@ class VentasView:
         self.id_producto_entry.delete(0, ttk.END)
         self.cantidad_entry.delete(0, ttk.END)
 
+    def eliminar_producto(self):
+        selected = self.sale_table.selection()
+        if not selected:
+            Messagebox.show_error("Seleccione un producto para eliminar.", "Error")
+            return
+        # Usamos el iid (que es el índice) para eliminar de la lista interna
+        index = int(selected[0])
+        del self.current_sale_items[index]
+        self.actualizar_tabla_ventas()
+
     def actualizar_tabla_ventas(self):
+        # Limpiar el Treeview
         for item in self.sale_table.get_children():
             self.sale_table.delete(item)
-        for sale_item in self.current_sale_items:
-            self.sale_table.insert("", ttk.END, values=(sale_item["id_producto"], sale_item["cantidad"]))
+        # Insertar los productos en el Treeview asignando el índice como iid
+        for index, sale_item in enumerate(self.current_sale_items):
+            self.sale_table.insert("", "end", iid=str(index), values=(sale_item["id_producto"], sale_item["cantidad"]))
+        # Calcular el total a pagar (suponiendo un precio fijo de 10.0 por producto)
+        total = sum(item["cantidad"] * 10.0 for item in self.current_sale_items)
+        self.total_label.config(text=f"Total a pagar: ${total:.2f}")
 
     def finalizar_venta(self):
         id_cliente = self.id_cliente_entry.get().strip()
