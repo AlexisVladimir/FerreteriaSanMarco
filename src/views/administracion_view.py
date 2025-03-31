@@ -5,6 +5,7 @@ from ttkbootstrap.dialogs import Messagebox
 from src.controllers.clientes_controller import ClientesController
 from src.controllers.empleados_controller import EmpleadosController
 from src.controllers.proveedores_controller import ProveedoresController
+from src.controllers.turnos_controller import TurnosController
 
 class AdministracionView:
     def __init__(self, notebook):
@@ -32,6 +33,7 @@ class AdministracionView:
         self.clientes_controller = ClientesController()
         self.empleados_controller = EmpleadosController()
         self.proveedores_controller = ProveedoresController()
+        self.turnos_controller = TurnosController()
 
         # Crear pestañas
         self._create_clientes_tab()
@@ -167,11 +169,12 @@ class AdministracionView:
         for item in historial:
             self.historial_clientes_table.insert("", "end", values=(item["id_ticket"], item["fecha_hora"], f"${item['total']:.2f}"))
 
-    # ================= Pestaña Empleados =================
+# ================= Pestaña Empleados =================
     def _create_empleados_tab(self):
         self.empleados_frame = ttk.Frame(self.admin_notebook)
         self.admin_notebook.add(self.empleados_frame, text="Empleados")
 
+        # Formulario para gestionar empleados
         form_frame = ttk.Frame(self.empleados_frame, padding=10)
         form_frame.pack(fill="x")
 
@@ -207,14 +210,22 @@ class AdministracionView:
 
         button_frame = ttk.Frame(self.empleados_frame, padding=10)
         button_frame.pack(fill="x")
-        ttk.Button(button_frame, text="Agregar Empleado", command=self.agregar_empleado, bootstyle="success").pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Editar Empleado", command=self.editar_empleado, bootstyle="warning").pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Eliminar Empleado", command=self.eliminar_empleado, bootstyle="danger").pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Consultar Historial de Ventas", command=self.consultar_historial_ventas, bootstyle="info").pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Agregar Empleado", command=self.agregar_empleado, bootstyle="success").pack(
+            side="left", padx=5)
+        ttk.Button(button_frame, text="Editar Empleado", command=self.editar_empleado, bootstyle="warning").pack(
+            side="left", padx=5)
+        ttk.Button(button_frame, text="Eliminar Empleado", command=self.eliminar_empleado, bootstyle="danger").pack(
+            side="left", padx=5)
+        ttk.Button(button_frame, text="Consultar Historial de Ventas", command=self.consultar_historial_ventas,
+                   bootstyle="info").pack(side="left", padx=5)
+        # Nuevo botón para consultar historial de turnos
+        ttk.Button(button_frame, text="Consultar Historial de Turnos", command=self.consultar_historial_turnos,
+                   bootstyle="info").pack(side="left", padx=5)
 
         table_frame = ttk.Frame(self.empleados_frame, padding=10)
         table_frame.pack(fill="both", expand=True)
-        self.empleados_table = ttk.Treeview(table_frame, columns=("ID", "Nombre Completo", "Cargo", "Teléfono", "Correo", "Fecha Ingreso"), show="headings")
+        self.empleados_table = ttk.Treeview(table_frame, columns=(
+        "ID", "Nombre Completo", "Cargo", "Teléfono", "Correo", "Fecha Ingreso"), show="headings")
         for col in ("ID", "Nombre Completo", "Cargo", "Teléfono", "Correo", "Fecha Ingreso"):
             self.empleados_table.heading(col, text=col)
         self.empleados_table.pack(fill="both", expand=True)
@@ -224,10 +235,23 @@ class AdministracionView:
         self.historial_empleados_frame = ttk.Frame(self.empleados_frame, padding=10)
         self.historial_empleados_frame.pack(fill="both", expand=True)
         ttk.Label(self.historial_empleados_frame, text="Historial de Ventas", font=("Helvetica", 14)).pack(pady=5)
-        self.historial_empleados_table = ttk.Treeview(self.historial_empleados_frame, columns=("Ticket ID", "Fecha", "Total"), show="headings")
+        self.historial_empleados_table = ttk.Treeview(self.historial_empleados_frame,
+                                                      columns=("Ticket ID", "Fecha", "Total"), show="headings")
         for col in ("Ticket ID", "Fecha", "Total"):
             self.historial_empleados_table.heading(col, text=col)
         self.historial_empleados_table.pack(fill="both", expand=True)
+
+        # Nuevo frame para historial de turnos
+        self.turnos_empleados_frame = ttk.Frame(self.empleados_frame, padding=10)
+        self.turnos_empleados_frame.pack(fill="both", expand=True)
+        ttk.Label(self.turnos_empleados_frame, text="Historial de Turnos", font=("Helvetica", 14)).pack(pady=5)
+        self.turnos_empleados_table = ttk.Treeview(self.turnos_empleados_frame,
+                                                   columns=(
+                                                   "ID Empleado", "Nombre", "Fecha", "Hora Entrada", "Hora Salida"),
+                                                   show="headings")
+        for col in ("ID Empleado", "Nombre", "Fecha", "Hora Entrada", "Hora Salida"):
+            self.turnos_empleados_table.heading(col, text=col)
+        self.turnos_empleados_table.pack(fill="both", expand=True)
 
         self.actualizar_tabla_empleados()
 
@@ -241,7 +265,8 @@ class AdministracionView:
         if not nombre_completo or not contrasena:
             Messagebox.show_error("Los campos Nombre Completo y Contraseña son obligatorios.", "Error")
             return
-        empleado = self.empleados_controller.agregar_empleado(nombre_completo, cargo, telefono, correo, fecha_ingreso, contrasena)
+        empleado = self.empleados_controller.agregar_empleado(nombre_completo, cargo, telefono, correo, fecha_ingreso,
+                                                              contrasena)
         if empleado:
             Messagebox.show_info(f"Empleado {empleado.nombre_completo} agregado.", "Éxito")
             self.actualizar_tabla_empleados()
@@ -257,7 +282,8 @@ class AdministracionView:
         correo = self.empleado_correo_entry.get()
         contrasena = self.empleado_contrasena_entry.get()
         fecha_ingreso = self.empleado_fecha_entry.get()
-        if self.empleados_controller.editar_empleado(id_empleado, nombre_completo, cargo, telefono, correo, fecha_ingreso, contrasena if contrasena.strip() else None):
+        if self.empleados_controller.editar_empleado(id_empleado, nombre_completo, cargo, telefono, correo,
+                                                     fecha_ingreso, contrasena if contrasena.strip() else None):
             Messagebox.show_info("Empleado actualizado.", "Éxito")
             self.actualizar_tabla_empleados()
             self.limpiar_campos_empleado()
@@ -304,14 +330,30 @@ class AdministracionView:
         for row in self.historial_empleados_table.get_children():
             self.historial_empleados_table.delete(row)
         for item in historial:
-            self.historial_empleados_table.insert("", "end", values=(item["id_ticket"], item["fecha_hora"], f"${item['total']:.2f}"))
+            self.historial_empleados_table.insert("", "end", values=(
+            item["id_ticket"], item["fecha_hora"], f"${item['total']:.2f}"))
+
+    def consultar_historial_turnos(self):
+        id_empleado = self.empleado_id_entry.get().strip()
+        if not id_empleado:
+            Messagebox.show_error("Ingrese un ID de empleado para consultar el historial de turnos.", "Error")
+            return
+        # Usar el controlador de turnos para obtener el historial
+        historial = self.turnos_controller.obtener_turnos(id_empleado)
+        for row in self.turnos_empleados_table.get_children():
+            self.turnos_empleados_table.delete(row)
+        for item in historial:
+            self.turnos_empleados_table.insert("", "end",
+                                               values=(item["id_empleado"], item["nombre"],
+                                                       item["fecha"], item["hora_entrada"], item["hora_salida"]))
 
     def actualizar_tabla_empleados(self):
         for row in self.empleados_table.get_children():
             self.empleados_table.delete(row)
         empleados = self.empleados_controller.obtener_empleados()
         for emp in empleados:
-            self.empleados_table.insert("", "end", values=(emp.id_empleado, emp.nombre_completo, emp.cargo, emp.telefono, emp.correo, emp.fecha_ingreso))
+            self.empleados_table.insert("", "end", values=(
+            emp.id_empleado, emp.nombre_completo, emp.cargo, emp.telefono, emp.correo, emp.fecha_ingreso))
 
     def limpiar_campos_empleado(self):
         self.empleado_id_entry.delete(0, ttk.END)
@@ -322,7 +364,7 @@ class AdministracionView:
         self.empleado_fecha_entry.delete(0, ttk.END)
         self.empleado_contrasena_entry.delete(0, ttk.END)
 
-    # ================= Pestaña Proveedores (no se modificó) =================
+# ================= Pestaña Proveedores (no se modificó) =================
     def _create_proveedores_tab(self):
         self.proveedores_frame = ttk.Frame(self.admin_notebook)
         self.admin_notebook.add(self.proveedores_frame, text="Proveedores")
@@ -354,14 +396,6 @@ class AdministracionView:
         self.proveedor_direccion_entry = ttk.Entry(form_frame)
         self.proveedor_direccion_entry.grid(row=5, column=1, pady=5, sticky="ew")
 
-        ttk.Label(form_frame, text="Sitio Web:").grid(row=6, column=0, sticky="w", pady=5)
-        self.proveedor_sitioweb_entry = ttk.Entry(form_frame)
-        self.proveedor_sitioweb_entry.grid(row=6, column=1, pady=5, sticky="ew")
-
-        ttk.Label(form_frame, text="Notas:").grid(row=7, column=0, sticky="w", pady=5)
-        self.proveedor_notas_entry = ttk.Entry(form_frame)
-        self.proveedor_notas_entry.grid(row=7, column=1, pady=5, sticky="ew")
-
         form_frame.columnconfigure(1, weight=1)
 
         button_frame = ttk.Frame(self.proveedores_frame, padding=10)
@@ -372,8 +406,8 @@ class AdministracionView:
 
         table_frame = ttk.Frame(self.proveedores_frame, padding=10)
         table_frame.pack(fill="both", expand=True)
-        self.proveedores_table = ttk.Treeview(table_frame, columns=("ID", "Nombre", "Contacto", "Teléfono", "Email", "Dirección", "Sitio Web", "Notas"), show="headings")
-        for col in ("ID", "Nombre", "Contacto", "Teléfono", "Email", "Dirección", "Sitio Web", "Notas"):
+        self.proveedores_table = ttk.Treeview(table_frame, columns=("ID", "Nombre", "Contacto", "Teléfono", "Email", "Dirección"), show="headings")
+        for col in ("ID", "Nombre", "Contacto", "Teléfono", "Email", "Dirección"):
             self.proveedores_table.heading(col, text=col)
         self.proveedores_table.pack(fill="both", expand=True)
         self.proveedores_table.bind("<Double-1>", self.cargar_datos_proveedor)
@@ -386,12 +420,10 @@ class AdministracionView:
         telefono = self.proveedor_telefono_entry.get()
         email = self.proveedor_email_entry.get()
         direccion = self.proveedor_direccion_entry.get()
-        sitio_web = self.proveedor_sitioweb_entry.get()
-        notas = self.proveedor_notas_entry.get()
         if not (nombre and direccion):
             Messagebox.show_error("Nombre y Dirección son obligatorios.", "Error")
             return
-        proveedor = self.proveedores_controller.agregar_proveedor(nombre, contacto, telefono, email, direccion, sitio_web, notas)
+        proveedor = self.proveedores_controller.agregar_proveedor(nombre, contacto, telefono, email, direccion)
         if proveedor:
             Messagebox.show_info(f"Proveedor {proveedor.nombre} agregado.", "Éxito")
             self.actualizar_tabla_proveedores()
@@ -406,9 +438,7 @@ class AdministracionView:
         telefono = self.proveedor_telefono_entry.get()
         email = self.proveedor_email_entry.get()
         direccion = self.proveedor_direccion_entry.get()
-        sitio_web = self.proveedor_sitioweb_entry.get()
-        notas = self.proveedor_notas_entry.get()
-        if self.proveedores_controller.editar_proveedor(id_proveedor, nombre, contacto, telefono, email, direccion, sitio_web, notas):
+        if self.proveedores_controller.editar_proveedor(id_proveedor, nombre, contacto, telefono, email, direccion):
             Messagebox.show_info("Proveedor actualizado.", "Éxito")
             self.actualizar_tabla_proveedores()
             self.limpiar_campos_proveedor()
@@ -444,17 +474,13 @@ class AdministracionView:
             self.proveedor_email_entry.insert(0, values[4])
             self.proveedor_direccion_entry.delete(0, ttk.END)
             self.proveedor_direccion_entry.insert(0, values[5])
-            self.proveedor_sitioweb_entry.delete(0, ttk.END)
-            self.proveedor_sitioweb_entry.insert(0, values[6])
-            self.proveedor_notas_entry.delete(0, ttk.END)
-            self.proveedor_notas_entry.insert(0, values[7])
 
     def actualizar_tabla_proveedores(self):
         for row in self.proveedores_table.get_children():
             self.proveedores_table.delete(row)
         proveedores = self.proveedores_controller.obtener_proveedores()
         for prov in proveedores:
-            self.proveedores_table.insert("", "end", values=(prov.id_proveedor, prov.nombre, prov.contacto, prov.telefono, prov.email, prov.direccion, prov.sitio_web, prov.notas))
+            self.proveedores_table.insert("", "end", values=(prov.id_proveedor, prov.nombre, prov.contacto, prov.telefono, prov.email, prov.direccion))
 
     def limpiar_campos_proveedor(self):
         self.proveedor_id_entry.delete(0, ttk.END)
@@ -463,8 +489,8 @@ class AdministracionView:
         self.proveedor_telefono_entry.delete(0, ttk.END)
         self.proveedor_email_entry.delete(0, ttk.END)
         self.proveedor_direccion_entry.delete(0, ttk.END)
-        self.proveedor_sitioweb_entry.delete(0, ttk.END)
-        self.proveedor_notas_entry.delete(0, ttk.END)
+
+#esto es para cerrar pestanas
 
     def close(self):
         self.clientes_controller.close()

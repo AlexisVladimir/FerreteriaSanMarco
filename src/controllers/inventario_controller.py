@@ -2,14 +2,11 @@
 from src.utils.db_helper import DatabaseHelper
 from datetime import datetime
 
-
 class InventarioController:
     def __init__(self):
         self.db = DatabaseHelper()
 
-    # src/controllers/inventario_controller.py
     def get_all_products(self):
-        # En el método get_all_products
         query = """
             SELECT 
                 p.ID_Producto, 
@@ -18,7 +15,8 @@ class InventarioController:
                 p.ID_Subcategoria,
                 s.Nombre AS Subcategoria,
                 p.Stock, 
-                p.Precio_Publico AS Precio_Unitario,  # Usar alias para mantener consistencia
+                p.Precio_Publico AS Precio_Unitario,
+                u.ID_Ubicacion,  # Agregar ID_Ubicacion
                 u.Descripcion AS Ubicacion
             FROM Producto p
             LEFT JOIN Subcategoria s ON p.ID_Subcategoria = s.ID_Subcategoria
@@ -34,22 +32,25 @@ class InventarioController:
                 "subcategoria": item[4],  # Nombre de la subcategoría
                 "stock": item[5],
                 "precio_unitario": item[6],
-                "ubicacion": item[7]
+                "id_ubicacion": item[7],  # ID de la ubicación
+                "ubicacion": item[8]  # Descripción de la ubicación
             } for item in results]
         except Exception as e:
             print(f"Error al consultar datos: {e}")
             return []
 
+    # Resto del código sin cambios...
     def get_subcategorias(self):
         query = "SELECT ID_Subcategoria, Nombre FROM Subcategoria"
         try:
             results = self.db.fetch_query(query)
+            print(f"Resultados de subcategorías desde la base de datos: {results}")  # Debug
             return [{"id": item[0], "nombre": item[1]} for item in results]
         except Exception as e:
             print(f"Error al obtener subcategorías: {e}")
             return []
 
-    def agregar_producto(self, nombre, descripcion, categoria, cantidad, precio, ubicacion, fecha=None,producto_id=None):
+    def agregar_producto(self, nombre, descripcion, categoria, cantidad, precio, ubicacion, fecha=None, producto_id=None):
         """Agregar un nuevo producto al inventario"""
         if not nombre or not cantidad or not precio:
             return False, "Nombre, cantidad y precio son campos obligatorios"
@@ -113,6 +114,7 @@ class InventarioController:
         query = "SELECT ID_Ubicacion, Descripcion FROM Ubicacion ORDER BY Descripcion"
         try:
             results = self.db.fetch_query(query)
+            print(f"Resultados de ubicaciones desde la base de datos: {results}")  # Debug
             return [{"id": item[0], "descripcion": item[1]} for item in results]
         except Exception as e:
             print(f"Error al obtener ubicaciones: {e}")
@@ -140,7 +142,7 @@ class InventarioController:
                     Descripcion = %s,
                     ID_Subcategoria = %s,
                     Stock = %s,
-                    Precio_Publico = %s,  # Cambiado a Precio_Publico
+                    Precio_Publico = %s,
                     ID_Ubicacion = %s,
                     Fecha_Ingreso = %s
                 WHERE ID_Producto = %s
@@ -200,7 +202,7 @@ class InventarioController:
                 p.ID_Producto, 
                 p.Nombre, 
                 IFNULL(s.Nombre, 'Sin Subcategoría') AS Subcategoria,
-                p.Precio_Publico,  -- Cambiado de Precio_Unitario a Precio_Publico
+                p.Precio_Publico,
                 p.Stock, 
                 IFNULL(u.Descripcion, 'Sin Ubicación') AS Ubicacion
             FROM Producto p
@@ -262,7 +264,7 @@ class InventarioController:
             return [{
                 "id": item[0],
                 "nombre": item[1],
-                "categoria": item[2],
+                "subcategoria": item[2],
                 "stock": item[3],
                 "ubicacion": item[4]
             } for item in results]

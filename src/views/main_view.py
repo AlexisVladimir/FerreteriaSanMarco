@@ -32,6 +32,10 @@ class MainView:
         self.notebook.add(ReportesView(self.notebook).frame, text="Reportes")
         self.notebook.add(AdministracionView(self.notebook).frame, text="Administracion")
 
+        print("Creando InventarioView desde MainView")  # Debug
+        self.inventario_view = InventarioView(self.root)
+
+
     def add_tab(self, title, message):
         if title == "Principal":
             frame = ttk.Frame(self.notebook, style="Black.TFrame")

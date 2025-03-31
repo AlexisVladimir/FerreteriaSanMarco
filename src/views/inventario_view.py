@@ -4,14 +4,17 @@ from ttkbootstrap.constants import *
 from tkinter import ttk, messagebox
 from src.controllers.inventario_controller import InventarioController
 
-
 class InventarioView:
     def __init__(self, parent):
+        print("Inicializando InventarioView")  # Debug
         self.controller = InventarioController()
         self.frame = tkb.Frame(parent)
         self.setup_inventario_tab()
         self.frame.pack(expand=True, fill="both")
         self.selected_product_id = None  # Para almacenar el ID del producto seleccionado
+        self.subcategoria_ids = []  # Almacenará los IDs de subcategorías
+        self.ubicacion_ids = []
+
 
     def setup_inventario_tab(self):
         notebook = ttk.Notebook(self.frame)
@@ -36,50 +39,8 @@ class InventarioView:
 
         notebook.pack(expand=True, fill="both", padx=10, pady=10)
 
-    def seleccionar_producto(self, event):
-        try:
-            selected = self.product_table.selection()
-            if not selected:
-                return
-
-            item = self.product_table.item(selected[0])
-            if not item or 'values' not in item or len(item['values']) < 1:
-                print("Error: Datos del producto no válidos")
-                return
-
-            # Debug: Imprimir valores seleccionados
-            print("Valores seleccionados:", item['values'])
-
-            self.selected_product_id = item['values'][0]
-            print(f"Producto seleccionado - ID: {self.selected_product_id}")
-
-            # Habilitar botones
-            self.btn_actualizar.config(state="normal")
-            self.btn_eliminar.config(state="normal")
-
-            # Mapeo de campos a valores
-            field_map = {
-                self.nombre_entry: item['values'][1],
-                self.descripcion_entry: item['values'][2],
-                self.subcategoria_entry: item['values'][3],
-                self.cantidad_entry: item['values'][4],
-                self.precio_entry: item['values'][5].replace("$", "") if isinstance(item['values'][5], str) else
-                item['values'][5],
-                self.ubicacion_entry: item['values'][6]
-            }
-
-            # Llenar formulario
-            self.limpiar_formulario()
-            for field, value in field_map.items():
-                if value is not None:
-                    field.insert(0, str(value))
-
-        except Exception as e:
-            print(f"Error en seleccionar_producto: {str(e)}")
-            messagebox.showerror("Error", f"No se pudo cargar el producto: {str(e)}")
-
     def setup_gestion_tab(self, tab):
-        """Configura la pestaña de gestión de productos con Combobox para ubicaciones"""
+        """Configura la pestaña de gestión de productos con Combobox para ubicaciones y subcategorías"""
         main_frame = tkb.Frame(tab)
         main_frame.pack(pady=10, padx=10, fill="both", expand=True)
 
@@ -98,7 +59,6 @@ class InventarioView:
         fields = [
             ("Nombre*:", "nombre_entry"),
             ("Descripción:", "descripcion_entry"),
-            ("Subcategoría (ID)*:", "subcategoria_entry"),
             ("Cantidad*:", "cantidad_entry"),
             ("Precio Unitario*:", "precio_entry")
         ]
@@ -110,16 +70,23 @@ class InventarioView:
             entry.pack(side="left", fill="x", expand=True, padx=5)
             setattr(self, attr_name, entry)
 
-        # Combobox para Ubicación (reemplaza el Entry)
+        # Combobox para Subcategoría
+        field_frame = tkb.Frame(form_frame)
+        field_frame.pack(fill="x", pady=2, padx=5)
+        tkb.Label(field_frame, text="Subcategoría*:", width=15).pack(side="left")
+        self.subcategoria_cb = ttk.Combobox(field_frame, state="readonly")
+        self.subcategoria_cb.pack(side="left", fill="x", expand=True, padx=5)
+        print("Llamando a load_subcategorias desde setup_gestion_tab")  # Debug
+        self.load_subcategorias()  # Cargar subcategorías al iniciar
+
+        # Combobox para Ubicación
         field_frame = tkb.Frame(form_frame)
         field_frame.pack(fill="x", pady=2, padx=5)
         tkb.Label(field_frame, text="Ubicación*:", width=15).pack(side="left")
         self.ubicacion_cb = ttk.Combobox(field_frame, state="readonly")
         self.ubicacion_cb.pack(side="left", fill="x", expand=True, padx=5)
-        self.ubicacion_ids = []  # Almacenará los IDs de ubicaciones
-
-        # Cargar ubicaciones al iniciar
-        self.load_ubicaciones()
+        print("Llamando a load_ubicaciones desde setup_gestion_tab")  # Debug
+        self.load_ubicaciones()  # Cargar ubicaciones al iniciar
 
         # Frame de botones
         btn_frame = tkb.Frame(form_frame)
@@ -140,10 +107,11 @@ class InventarioView:
         table_frame.pack(fill="both", expand=True, pady=5)
 
         # Configuración de la tabla
-        columns = ("ID", "Nombre", "Descripción", "Subcategoría", "Stock", "Precio", "Ubicación")
+        columns = ("ID", "Nombre", "Descripción", "Subcategoría", "ID_Subcategoria", "Stock", "Precio", "Ubicación",
+                   "ID_Ubicacion")
         self.product_table = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse",
                                           bootstyle="light")
-        col_widths = [50, 150, 200, 100, 60, 80, 100]
+        col_widths = [50, 150, 200, 100, 0, 60, 80, 100, 0]  # ID_Subcategoria y ID_Ubicacion ocultos (ancho 0)
         for idx, col in enumerate(columns):
             self.product_table.heading(col, text=col, anchor="center")
             self.product_table.column(col, width=col_widths[idx], anchor="center", stretch=False)
@@ -165,99 +133,186 @@ class InventarioView:
         self.product_table.bind("<<TreeviewSelect>>", self.on_product_select)
 
         # Cargar datos iniciales
+        print("Cargando productos desde setup_gestion_tab")  # Debug
         self.load_products()
+
+    def load_subcategorias(self):
+        """Carga las subcategorías en el Combobox"""
+        print("Cargando subcategorías...")  # Debug
+        subcategorias = self.controller.get_subcategorias()
+        print(f"Subcategorías cargadas: {subcategorias}")
+        if not subcategorias:
+            print("No se encontraron subcategorías")
+            self.subcategoria_ids = []
+            self.subcategoria_cb["values"] = []
+            messagebox.showerror("Error",
+                                 "No se encontraron subcategorías en la base de datos. Por favor, agregue subcategorías antes de continuar.")
+            raise RuntimeError("No se encontraron subcategorías en la base de datos")
+        # Guardamos los IDs en una lista aparte
+        self.subcategoria_ids = [subcat["id"] for subcat in subcategorias]
+        # Mostramos los nombres en el Combobox
+        self.subcategoria_cb["values"] = [subcat["nombre"] for subcat in subcategorias]
+        print(f"IDs de subcategorías después de cargar: {self.subcategoria_ids}")  # Debug adicional
 
     def load_ubicaciones(self):
         """Carga las ubicaciones en el Combobox"""
+        print("Cargando ubicaciones...")  # Debug
         ubicaciones = self.controller.get_ubicaciones()
+        print(f"Ubicaciones cargadas: {ubicaciones}")
+        if not ubicaciones:
+            print("No se encontraron ubicaciones")
+            self.ubicacion_ids = []
+            self.ubicacion_cb["values"] = []
+            messagebox.showerror("Error",
+                                 "No se encontraron ubicaciones en la base de datos. Por favor, agregue ubicaciones antes de continuar.")
+            raise RuntimeError("No se encontraron ubicaciones en la base de datos")
         # Guardamos los IDs en una lista aparte
         self.ubicacion_ids = [ubic["id"] for ubic in ubicaciones]
         # Mostramos las descripciones en el Combobox
         self.ubicacion_cb["values"] = [ubic["descripcion"] for ubic in ubicaciones]
+        print(f"IDs de ubicaciones después de cargar: {self.ubicacion_ids}")  # Debug adicional
 
     def on_product_select(self, event):
-        """Maneja la selección de un producto en la tabla y actualiza el formulario"""
-        selected = self.product_table.selection()
-        if not selected:
-            return
+        """Maneja la selección de un producto en la tabla"""
+        try:
+            selected = self.product_table.selection()
+            if not selected:  # Si no hay selección, salir
+                return
 
-        item = self.product_table.item(selected[0])
-        values = item.get('values', [])
-        if len(values) < 7:
-            return
+            item = self.product_table.item(selected[0])
+            values = item.get('values', [])
 
-        # Actualizar campos del formulario
-        self.id_entry.config(state="normal")  # Temporalmente editable para modificar
-        self.id_entry.delete(0, "end")
-        self.id_entry.insert(0, str(values[0]))
-        self.id_entry.config(state="readonly")  #
+            if not values or len(values) < 9:  # Validar que hay suficientes columnas
+                print("Error: Datos del producto incompletos")
+                return
 
-        self.nombre_entry.delete(0, "end")
-        self.nombre_entry.insert(0, values[1])
+            # Guardar el ID del producto seleccionado
+            self.selected_product_id = values[0]
+            print(f"Producto seleccionado - ID: {self.selected_product_id}")  # Debug
 
-        self.descripcion_entry.delete(0, "end")
-        self.descripcion_entry.insert(0, values[2] if values[2] else "")
+            # Depuración adicional: Mostrar el estado de las listas
+            print(f"Estado de self.subcategoria_ids en on_product_select: {self.subcategoria_ids}")
+            print(f"Estado de self.ubicacion_ids en on_product_select: {self.ubicacion_ids}")
 
-        self.subcategoria_entry.delete(0, "end")
-        self.subcategoria_entry.insert(0, values[3])
+            # Si las listas están vacías, intentar recargarlas
+            if not self.subcategoria_ids:
+                print("self.subcategoria_ids está vacía, intentando recargar...")
+                self.load_subcategorias()
+                if not self.subcategoria_ids:  # Verificar nuevamente después de recargar
+                    messagebox.showerror("Error",
+                                         "No hay subcategorías disponibles. Por favor, reinicie la aplicación.")
+                    return
 
-        self.cantidad_entry.delete(0, "end")
-        self.cantidad_entry.insert(0, values[4])
+            if not self.ubicacion_ids:
+                print("self.ubicacion_ids está vacía, intentando recargar...")
+                self.load_ubicaciones()
+                if not self.ubicacion_ids:  # Verificar nuevamente después de recargar
+                    messagebox.showerror("Error", "No hay ubicaciones disponibles. Por favor, reinicie la aplicación.")
+                    return
 
-        self.precio_entry.delete(0, "end")
-        precio = str(values[5]).replace("$", "").strip() if isinstance(values[5], str) else values[5]
-        self.precio_entry.insert(0, precio)
+            # Actualizar campos del formulario
+            self.id_entry.config(state="normal")
+            self.id_entry.delete(0, "end")
+            self.id_entry.insert(0, str(values[0]))
+            self.id_entry.config(state="readonly")
 
-        # Ubicación: Seleccionar el Combobox según el ID
-        ubicacion_id = values[6]
-        if ubicacion_id:
-            try:
-                idx = self.ubicacion_ids.index(int(ubicacion_id))
-                self.ubicacion_cb.current(idx)
-            except ValueError:
-                print(f"Ubicación ID {ubicacion_id} no encontrada")
-                self.ubicacion_cb.set("")
+            self.nombre_entry.delete(0, "end")
+            self.nombre_entry.insert(0, values[1])
 
-        # Habilitar botones de edición
-        self.btn_actualizar.config(state="normal")
-        self.btn_eliminar.config(state="normal")
+            self.descripcion_entry.delete(0, "end")
+            self.descripcion_entry.insert(0, values[2] if values[2] else "")
+
+            # Manejar la subcategoría (Combobox)
+            if values[4]:  # ID_Subcategoria (columna oculta)
+                try:
+                    subcategoria_id = int(values[4])
+                    print(
+                        f"ID Subcategoría del producto: {subcategoria_id}, Subcategorías disponibles: {self.subcategoria_ids}")  # Debug
+                    if subcategoria_id in self.subcategoria_ids:
+                        idx = self.subcategoria_ids.index(subcategoria_id)
+                        self.subcategoria_cb.current(idx)
+                    else:
+                        self.subcategoria_cb.set("")
+                        messagebox.showwarning("Advertencia",
+                                               f"La subcategoría con ID {subcategoria_id} no está disponible")
+                except ValueError:
+                    self.subcategoria_cb.set("")
+
+            self.cantidad_entry.delete(0, "end")
+            self.cantidad_entry.insert(0, values[5])
+
+            self.precio_entry.delete(0, "end")
+            precio = str(values[6]).replace("$", "").strip() if isinstance(values[6], str) else values[6]
+            self.precio_entry.insert(0, precio)
+
+            # Manejar la ubicación (Combobox) - Solo actualizar si está vacío
+            if values[8] and not self.ubicacion_cb.get():  # ID_Ubicacion (columna oculta)
+                try:
+                    ubicacion_id = int(values[8])
+                    print(
+                        f"ID Ubicación del producto: {ubicacion_id}, Ubicaciones disponibles: {self.ubicacion_ids}")  # Debug
+                    if ubicacion_id in self.ubicacion_ids:
+                        idx = self.ubicacion_ids.index(ubicacion_id)
+                        self.ubicacion_cb.current(idx)
+                    else:
+                        self.ubicacion_cb.set("")
+                        messagebox.showwarning("Advertencia", f"La ubicación con ID {ubicacion_id} no está disponible")
+                except ValueError:
+                    self.ubicacion_cb.set("")
+
+            # Habilitar botones de edición
+            self.btn_actualizar.config(state="normal")
+            self.btn_eliminar.config(state="normal")
+
+        except Exception as e:
+            print(f"Error en on_product_select: {str(e)}")
+            messagebox.showerror("Error", f"No se pudo cargar el producto: {str(e)}")
 
     def limpiar_formulario(self):
         """Limpia el formulario y habilita el campo ID para nuevos registros"""
         for entry in [self.id_entry, self.nombre_entry, self.descripcion_entry,
-                      self.subcategoria_entry, self.cantidad_entry, self.precio_entry]:
+                      self.cantidad_entry, self.precio_entry]:
             entry.delete(0, "end")
             entry.config(state="normal")  # Asegurar que el ID sea editable al limpiar
 
-        self.ubicacion_cb.set("")  # Limpiar Combobox
+        self.subcategoria_cb.set("")  # Limpiar Combobox de subcategoría
+        self.ubicacion_cb.set("")  # Limpiar Combobox de ubicación
         self.selected_product_id = None
         self.btn_actualizar.config(state="disabled")
         self.btn_eliminar.config(state="disabled")
 
     def load_products(self):
+        # Limpiar tabla
         for item in self.product_table.get_children():
             self.product_table.delete(item)
+
+        # Obtener productos del controlador
         products = self.controller.get_all_products()
-        print(f"Productos cargados: {products}")
+        print(f"Productos cargados: {products}")  # Debug
+
         if not products:
             print("No se encontraron productos")
             return
+
+        # Insertar productos en la tabla
         for product in products:
             self.product_table.insert("", "end", values=(
                 product["id_producto"],
                 product["nombre"],
                 product.get("descripcion", ""),
-                product.get("subcategoria", ""),  # Nombre de subcategoría
+                product.get("subcategoria", ""),  # Nombre de la subcategoría
+                product.get("id_subcategoria", ""),  # ID de la subcategoría (oculto)
                 product.get("stock", 0),
                 f"${product.get('precio_unitario', 0):.2f}",
-                product.get("ubicacion", "")
-            ), tags=(product["id_subcategoria"],))  # ID de subcategoría en tags
+                product.get("ubicacion", ""),  # Descripción de la ubicación
+                product.get("id_ubicacion", "")  # ID de la ubicación (oculto)
+            ))
 
     def agregar_producto(self):
         # Validar campos obligatorios (excepto ID)
         required_fields = [
             (self.nombre_entry, "Nombre"),
-            (self.subcategoria_entry, "Subcategoría"),
+            (self.subcategoria_cb, "Subcategoría"),
             (self.cantidad_entry, "Cantidad"),
             (self.precio_entry, "Precio"),
             (self.ubicacion_cb, "Ubicación")
@@ -285,7 +340,7 @@ class InventarioView:
             # Resto de los datos
             nombre = self.nombre_entry.get().strip()
             descripcion = self.descripcion_entry.get().strip() or None
-            subcategoria = int(self.subcategoria_entry.get())
+            subcategoria_id = self.subcategoria_ids[self.subcategoria_cb.current()]
             cantidad = int(self.cantidad_entry.get())
             precio = float(self.precio_entry.get())
             ubicacion_id = self.ubicacion_ids[self.ubicacion_cb.current()]
@@ -294,7 +349,7 @@ class InventarioView:
             success, message = self.controller.agregar_producto(
                 nombre=nombre,
                 descripcion=descripcion,
-                categoria=subcategoria,
+                categoria=subcategoria_id,
                 cantidad=cantidad,
                 precio=precio,
                 ubicacion=ubicacion_id,
@@ -323,7 +378,7 @@ class InventarioView:
         # Validar campos obligatorios
         required_fields = [
             (self.nombre_entry, "Nombre"),
-            (self.subcategoria_entry, "Subcategoría"),
+            (self.subcategoria_cb, "Subcategoría"),
             (self.cantidad_entry, "Cantidad"),
             (self.precio_entry, "Precio"),
             (self.ubicacion_cb, "Ubicación")  # Validar Combobox
@@ -338,13 +393,43 @@ class InventarioView:
                 return
 
         try:
+            # Validar que las listas de IDs no estén vacías
+            if not self.subcategoria_ids:
+                messagebox.showerror("Error", "No hay subcategorías disponibles para seleccionar")
+                return
+            if not self.ubicacion_ids:
+                messagebox.showerror("Error", "No hay ubicaciones disponibles para seleccionar")
+                return
+
             # Obtener el ID de ubicación desde el Combobox
-            ubicacion_id = self.ubicacion_ids[self.ubicacion_cb.current()]
+            ubicacion_idx = self.ubicacion_cb.current()
+            if ubicacion_idx == -1:
+                messagebox.showerror("Error", "Seleccione una ubicación válida")
+                return
+            print(
+                f"Índice de ubicación seleccionado: {ubicacion_idx}, Ubicaciones disponibles: {self.ubicacion_ids}")  # Debug
+            if ubicacion_idx >= len(self.ubicacion_ids):
+                messagebox.showerror("Error",
+                                     f"Índice de ubicación {ubicacion_idx} fuera de rango. Ubicaciones disponibles: {self.ubicacion_ids}")
+                return
+            ubicacion_id = self.ubicacion_ids[ubicacion_idx]
+
+            # Obtener el ID de subcategoría desde el Combobox
+            subcategoria_idx = self.subcategoria_cb.current()
+            if subcategoria_idx == -1:
+                messagebox.showerror("Error", "Seleccione una subcategoría válida")
+                return
+            print(
+                f"Índice de subcategoría seleccionado: {subcategoria_idx}, Subcategorías disponibles: {self.subcategoria_ids}")  # Debug
+            if subcategoria_idx >= len(self.subcategoria_ids):
+                messagebox.showerror("Error",
+                                     f"Índice de subcategoría {subcategoria_idx} fuera de rango. Subcategorías disponibles: {self.subcategoria_ids}")
+                return
+            subcategoria_id = self.subcategoria_ids[subcategoria_idx]
 
             # Validar valores numéricos
             nombre = self.nombre_entry.get().strip()
             descripcion = self.descripcion_entry.get().strip() or None
-            subcategoria = int(self.subcategoria_entry.get())
             cantidad = int(self.cantidad_entry.get())
             precio = float(self.precio_entry.get())
 
@@ -353,7 +438,7 @@ class InventarioView:
                 producto_id=self.selected_product_id,
                 nombre=nombre,
                 descripcion=descripcion,
-                categoria=subcategoria,
+                categoria=subcategoria_id,
                 cantidad=cantidad,
                 precio=precio,
                 ubicacion=ubicacion_id,  # Usa el ID, no la descripción
@@ -370,6 +455,7 @@ class InventarioView:
         except ValueError as e:
             messagebox.showerror("Error", f"Valores numéricos inválidos: {str(e)}")
         except Exception as e:
+            print(f"Error al actualizar producto: {str(e)}")
             messagebox.showerror("Error", f"Error al actualizar: {str(e)}")
 
     def eliminar_producto(self):
@@ -697,3 +783,5 @@ class InventarioView:
                 ))
         except ValueError:
             messagebox.showerror("Error", "El año debe ser un número válido")
+        except Exception as e:
+            messagebox.showerror("Error", f"Ocurrió un error inesperado: {str(e)}")
