@@ -1,4 +1,3 @@
-# src/views/ventas_view.py
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Messagebox
@@ -48,15 +47,34 @@ class VentasView:
 
         input_frame.columnconfigure(1, weight=1)
 
+        # Nuevo frame para método de pago
+        payment_frame = ttk.Frame(self.ventas_frame, padding=10)
+        payment_frame.pack(fill="x")
+        ttk.Label(payment_frame, text="Método de pago:").grid(row=0, column=0, sticky="w", pady=5)
+        self.payment_method_var = ttk.StringVar()
+        self.payment_method_combobox = ttk.Combobox(payment_frame, textvariable=self.payment_method_var, state="readonly")
+        self.payment_method_combobox['values'] = ["Efectivo", "Tarjeta"]
+        self.payment_method_combobox.current(0)
+        self.payment_method_combobox.grid(row=0, column=1, sticky="ew", pady=5)
+        ttk.Label(payment_frame, text="Monto entregado (si es efectivo):").grid(row=1, column=0, sticky="w", pady=5)
+        self.efectivo_entry = ttk.Entry(payment_frame)
+        self.efectivo_entry.grid(row=1, column=1, sticky="ew", pady=5)
+        payment_frame.columnconfigure(1, weight=1)
+
         button_frame = ttk.Frame(self.ventas_frame, padding=10)
         button_frame.pack(fill="x")
         ttk.Button(button_frame, text="Agregar Producto", command=self.agregar_producto, bootstyle="success").pack(side="left", padx=5)
         ttk.Button(button_frame, text="Eliminar Producto", command=self.eliminar_producto, bootstyle="danger").pack(side="left", padx=5)
         ttk.Button(button_frame, text="Finalizar Venta", command=self.finalizar_venta, bootstyle="primary").pack(side="right", padx=5)
 
-        self.sale_table = ttk.Treeview(self.ventas_frame, columns=("ID Producto", "Cantidad"), show="headings")
+        # Actualizamos las columnas del Treeview para mostrar la información completa del producto
+        self.sale_table = ttk.Treeview(self.ventas_frame, columns=("ID Producto", "Nombre", "Descripción", "Precio", "Cantidad", "Subtotal"), show="headings")
         self.sale_table.heading("ID Producto", text="ID Producto")
+        self.sale_table.heading("Nombre", text="Nombre")
+        self.sale_table.heading("Descripción", text="Descripción")
+        self.sale_table.heading("Precio", text="Precio")
         self.sale_table.heading("Cantidad", text="Cantidad")
+        self.sale_table.heading("Subtotal", text="Subtotal")
         self.sale_table.pack(fill="both", expand=True, padx=10, pady=10)
 
         # Label para mostrar el total a pagar
@@ -77,7 +95,22 @@ class VentasView:
             Messagebox.show_error("Debe ingresar un ID de producto.", "Error")
             return
 
-        self.current_sale_items.append({"id_producto": id_producto, "cantidad": cantidad})
+        prod_info = self.controller.obtener_producto_info(id_producto)
+        if not prod_info:
+            Messagebox.show_error(f"Producto con ID {id_producto} no encontrado.", "Error")
+            return
+
+        if prod_info["stock"] < cantidad:
+            Messagebox.show_error(f"No hay suficiente stock para el producto {prod_info['nombre']}. Stock actual: {prod_info['stock']}", "Error")
+            return
+
+        self.current_sale_items.append({
+            "id_producto": id_producto,
+            "nombre": prod_info["nombre"],
+            "descripcion": prod_info["descripcion"],
+            "precio": prod_info["precio"],
+            "cantidad": cantidad
+        })
         self.actualizar_tabla_ventas()
 
         self.id_producto_entry.delete(0, ttk.END)
@@ -88,7 +121,6 @@ class VentasView:
         if not selected:
             Messagebox.show_error("Seleccione un producto para eliminar.", "Error")
             return
-        # Usamos el iid (que es el índice) para eliminar de la lista interna
         index = int(selected[0])
         del self.current_sale_items[index]
         self.actualizar_tabla_ventas()
@@ -97,12 +129,17 @@ class VentasView:
         # Limpiar el Treeview
         for item in self.sale_table.get_children():
             self.sale_table.delete(item)
-        # Insertar los productos en el Treeview asignando el índice como iid
-        for index, sale_item in enumerate(self.current_sale_items):
-            self.sale_table.insert("", "end", iid=str(index), values=(sale_item["id_producto"], sale_item["cantidad"]))
-        # Calcular el total a pagar (suponiendo un precio fijo de 10.0 por producto)
-        total = sum(item["cantidad"] * 10.0 for item in self.current_sale_items)
-        self.total_label.config(text=f"Total a pagar: ${total:.2f}")
+        total = 0
+
+        # Insertar productos en el Treeview con los nuevos campos
+        for index, item in enumerate(self.current_sale_items):
+            subtotal = item["cantidad"] * item["precio"]
+            total += subtotal*1.16
+            self.sale_table.insert("", "end", iid=str(index),
+                                   values=(item["id_producto"], item["nombre"], item["descripcion"], f"${item['precio']:.2f}",
+                                           item["cantidad"], f"${subtotal:.2f}"))
+        totaltotal = total * 1.16
+        self.total_label.config(text=f"Total a pagar: ${total:.2f}")
 
     def finalizar_venta(self):
         id_cliente = self.id_cliente_entry.get().strip()
@@ -113,13 +150,18 @@ class VentasView:
             Messagebox.show_error("No hay productos en la venta.", "Error")
             return
 
+        payment_method = self.payment_method_var.get()
+        efectivo_amount = None
+        if payment_method == "Efectivo":
+            try:
+                efectivo_amount = float(self.efectivo_entry.get().strip())
+            except ValueError:
+                Messagebox.show_error("El monto entregado debe ser un número.", "Error")
+                return
+
         try:
-            # Se asume que el empleado se fija de alguna forma; aquí se usa "1" como ejemplo
-            ticket = self.controller.registrar_venta(id_cliente, "1", self.current_sale_items)
-            Messagebox.show_info(
-                f"Venta finalizada. Ticket ID: {ticket['id_ticket']}\nPDF generado en: {ticket['pdf_path']}",
-                "Éxito"
-            )
+            ticket = self.controller.registrar_venta(id_cliente, "1", self.current_sale_items, payment_method, efectivo_amount)
+            Messagebox.show_info(f"Venta finalizada. Ticket ID: {ticket['id_ticket']}\nPDF generado en: {ticket['pdf_path']}", "Éxito")
             self.id_cliente_entry.delete(0, ttk.END)
             self.current_sale_items.clear()
             self.actualizar_tabla_ventas()
@@ -128,31 +170,24 @@ class VentasView:
             print(f"Error capturado en finalizar_venta: {error_message}")
             Messagebox.show_error(error_message, "Error")
 
-    # --- Pestaña Devoluciones ---
+    # --- Pestaña Devoluciones (sin cambios) ---
     def build_devoluciones_ui(self):
         devol_frame = ttk.Frame(self.devoluciones_frame, padding=10)
         devol_frame.pack(fill="x")
-
         ttk.Label(devol_frame, text="ID Ticket:").grid(row=0, column=0, sticky="w", pady=5)
         self.devol_ticket_entry = ttk.Entry(devol_frame)
         self.devol_ticket_entry.grid(row=0, column=1, pady=5, sticky="ew")
-
         ttk.Label(devol_frame, text="ID Producto:").grid(row=1, column=0, sticky="w", pady=5)
         self.devol_producto_entry = ttk.Entry(devol_frame)
         self.devol_producto_entry.grid(row=1, column=1, pady=5, sticky="ew")
-
         ttk.Label(devol_frame, text="Cantidad:").grid(row=2, column=0, sticky="w", pady=5)
         self.devol_cantidad_entry = ttk.Entry(devol_frame)
         self.devol_cantidad_entry.grid(row=2, column=1, pady=5, sticky="ew")
-
         ttk.Label(devol_frame, text="Motivo:").grid(row=3, column=0, sticky="w", pady=5)
         self.devol_motivo_entry = ttk.Entry(devol_frame)
         self.devol_motivo_entry.grid(row=3, column=1, pady=5, sticky="ew")
-
         devol_frame.columnconfigure(1, weight=1)
-
-        ttk.Button(devol_frame, text="Registrar Devolución",
-                   command=self.registrar_devolucion, bootstyle="info").grid(row=4, column=1, pady=10, sticky="e")
+        ttk.Button(devol_frame, text="Registrar Devolución", command=self.registrar_devolucion, bootstyle="info").grid(row=4, column=1, pady=10, sticky="e")
 
     def registrar_devolucion(self):
         id_ticket = self.devol_ticket_entry.get().strip()
@@ -163,11 +198,9 @@ class VentasView:
             Messagebox.show_error("La cantidad debe ser un número entero.", "Error")
             return
         motivo = self.devol_motivo_entry.get().strip()
-
         if not (id_ticket and id_producto and cantidad > 0):
             Messagebox.show_error("Todos los campos son obligatorios y la cantidad debe ser mayor que 0.", "Error")
             return
-
         devolucion = self.devolucion_controller.agregar_devolucion(id_ticket, id_producto, cantidad, motivo)
         if devolucion:
             Messagebox.show_info("Devolución registrada exitosamente.", "Éxito")

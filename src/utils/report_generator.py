@@ -12,14 +12,25 @@ class ReportGenerator:
             os.makedirs(self.output_dir)
 
     def generate_ticket_pdf(self, ticket_data, sale_items, filename=None):
+        """
+        ticket_data debe incluir:
+         - id_ticket, fecha_hora, id_empleado, id_cliente, subtotal, iva_amount, total,
+           payment_method, efectivo_amount, change, total_in_letters
+        sale_items: lista de diccionarios con claves:
+         - id_producto, nombre, descripcion, precio, cantidad
+        """
         if not filename:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"ticket_{ticket_data['id_ticket']}_{timestamp}.pdf"
         filepath = os.path.join(self.output_dir, filename)
         c = canvas.Canvas(filepath, pagesize=letter)
         width, height = letter
+
+        # Título del ticket
         c.setFont("Helvetica-Bold", 16)
         c.drawString(1 * inch, height - 1 * inch, "Ferretería San Marco - Ticket de Venta")
+
+        # Información general del ticket
         c.setFont("Helvetica", 12)
         y_position = height - 1.5 * inch
         c.drawString(1 * inch, y_position, f"Ticket ID: {ticket_data['id_ticket']}")
@@ -30,33 +41,77 @@ class ReportGenerator:
         y_position -= 0.3 * inch
         c.drawString(1 * inch, y_position, f"Empleado ID: {ticket_data['id_empleado']}")
         y_position -= 0.5 * inch
+
+        # Encabezado de la tabla de productos
         c.setFont("Helvetica-Bold", 12)
         c.drawString(1 * inch, y_position, "Productos:")
         y_position -= 0.3 * inch
-        c.drawString(1 * inch, y_position, "ID Producto")
-        c.drawString(3 * inch, y_position, "Cantidad")
-        c.drawString(4.5 * inch, y_position, "Precio Unitario")
+        c.drawString(1 * inch, y_position, "ID")
+        c.drawString(2 * inch, y_position, "Nombre")
+        c.drawString(4 * inch, y_position, "Cantidad")
+        c.drawString(5 * inch, y_position, "C/P")
         c.drawString(6 * inch, y_position, "Subtotal")
         y_position -= 0.1 * inch
         c.line(1 * inch, y_position, 7 * inch, y_position)
         y_position -= 0.3 * inch
+
+        # Lista de productos
         c.setFont("Helvetica", 12)
         for item in sale_items:
             id_producto = item["id_producto"]
+            nombre = item.get("nombre", "Desconocido")
             cantidad = item["cantidad"]
-            precio_unitario = 10.0
-            subtotal = cantidad * precio_unitario
+            precio_unitario = item["precio"]
+            item_subtotal = cantidad * precio_unitario
             c.drawString(1 * inch, y_position, str(id_producto))
-            c.drawString(3 * inch, y_position, str(cantidad))
-            c.drawString(4.5 * inch, y_position, f"${precio_unitario:.2f}")
-            c.drawString(6 * inch, y_position, f"${subtotal:.2f}")
+            c.drawString(2 * inch, y_position, nombre[:20])
+            c.drawString(4 * inch, y_position, str(cantidad))
+            c.drawString(5 * inch, y_position, f"${precio_unitario:.2f}")
+            c.drawString(6 * inch, y_position, f"${item_subtotal:.2f}")
             y_position -= 0.3 * inch
+            if y_position < 2 * inch:
+                c.showPage()
+                y_position = height - 1 * inch
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(1 * inch, y_position, "Productos (continuación):")
+                y_position -= 0.3 * inch
+                c.drawString(1 * inch, y_position, "ID")
+                c.drawString(2 * inch, y_position, "Nombre")
+                c.drawString(4 * inch, y_position, "Cantidad")
+                c.drawString(5 * inch, y_position, "Precio Unitario")
+                c.drawString(6 * inch, y_position, "Subtotal")
+                y_position -= 0.1 * inch
+                c.line(1 * inch, y_position, 7 * inch, y_position)
+                y_position -= 0.3 * inch
+                c.setFont("Helvetica", 12)
+
+        # Mostrar subtotal, IVA y total
         y_position -= 0.3 * inch
         c.setFont("Helvetica-Bold", 12)
-        c.drawString(1 * inch, y_position, f"Total: ${ticket_data['total']:.2f}")
+        c.drawString(1 * inch, y_position, f"Subtotal (sin IVA): ${ticket_data['subtotal']:.2f}")
+        y_position -= 0.3 * inch
+        c.drawString(1 * inch, y_position, f"IVA (16.0%): ${ticket_data['iva_amount']:.2f}")
+        y_position -= 0.3 * inch
+        c.drawString(1 * inch, y_position, f"Total a Pagar (con IVA): ${ticket_data['total']:.2f}")
+        y_position -= 0.5 * inch
+
+        # Mostrar información de pago
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(1 * inch, y_position, f"Método de Pago: {ticket_data['payment_method']}")
+        y_position -= 0.3 * inch
+        if ticket_data["payment_method"] == "Efectivo":
+            c.drawString(1 * inch, y_position, f"Monto Entregado: ${ticket_data['efectivo_amount']:.2f}")
+            y_position -= 0.3 * inch
+            c.drawString(1 * inch, y_position, f"Cambio: ${ticket_data['change']:.2f}")
+            y_position -= 0.3 * inch
+        c.drawString(1 * inch, y_position, f"Total en Letras: {ticket_data['total_in_letters']}")
+        y_position -= 0.5 * inch
+
+        # Pie de página
         c.setFont("Helvetica", 10)
         c.drawString(1 * inch, 1 * inch, "Gracias por su compra en Ferretería San Marco")
         c.drawString(1 * inch, 0.7 * inch, "Fecha de generación: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+
         c.showPage()
         c.save()
         return filepath

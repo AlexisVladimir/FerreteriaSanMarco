@@ -309,7 +309,8 @@ class InventarioView:
             ))
 
     def agregar_producto(self):
-        # Validar campos obligatorios (excepto ID)
+        """Agrega un nuevo producto al inventario"""
+        # Validar campos obligatorios
         required_fields = [
             (self.nombre_entry, "Nombre"),
             (self.subcategoria_cb, "Subcategoría"),
@@ -327,25 +328,58 @@ class InventarioView:
                 return
 
         try:
-            # Obtener el ID (si está vacío, se autogenerará)
-            id_producto = self.id_entry.get().strip()
-            if id_producto:
-                id_producto = int(id_producto)
-                if self.controller._producto_existe(id_producto):
-                    messagebox.showerror("Error", f"El ID {id_producto} ya existe")
-                    return
-            else:
-                id_producto = None  # El controlador generará uno automático
+            # Depuración: Mostrar el estado de las listas
+            print(f"Estado de self.subcategoria_ids en agregar_producto: {self.subcategoria_ids}")
+            print(f"Estado de self.ubicacion_ids en agregar_producto: {self.ubicacion_ids}")
 
-            # Resto de los datos
+            # Si las listas están vacías, intentar recargarlas
+            if not self.subcategoria_ids:
+                print("self.subcategoria_ids está vacía, intentando recargar...")
+                self.load_subcategorias()
+                if not self.subcategoria_ids:
+                    messagebox.showerror("Error",
+                                         "No hay subcategorías disponibles. Por favor, reinicie la aplicación.")
+                    return
+
+            if not self.ubicacion_ids:
+                print("self.ubicacion_ids está vacía, intentando recargar...")
+                self.load_ubicaciones()
+                if not self.ubicacion_ids:
+                    messagebox.showerror("Error", "No hay ubicaciones disponibles. Por favor, reinicie la aplicación.")
+                    return
+
+            # Obtener el ID de ubicación desde el Combobox
+            ubicacion_idx = self.ubicacion_cb.current()
+            if ubicacion_idx == -1:
+                messagebox.showerror("Error", "Seleccione una ubicación válida")
+                return
+            print(f"Índice de ubicación seleccionado: {ubicacion_idx}, Ubicaciones disponibles: {self.ubicacion_ids}")
+            if ubicacion_idx >= len(self.ubicacion_ids):
+                messagebox.showerror("Error",
+                                     f"Índice de ubicación {ubicacion_idx} fuera de rango. Ubicaciones disponibles: {self.ubicacion_ids}")
+                return
+            ubicacion_id = self.ubicacion_ids[ubicacion_idx]
+
+            # Obtener el ID de subcategoría desde el Combobox
+            subcategoria_idx = self.subcategoria_cb.current()
+            if subcategoria_idx == -1:
+                messagebox.showerror("Error", "Seleccione una subcategoría válida")
+                return
+            print(
+                f"Índice de subcategoría seleccionado: {subcategoria_idx}, Subcategorías disponibles: {self.subcategoria_ids}")
+            if subcategoria_idx >= len(self.subcategoria_ids):
+                messagebox.showerror("Error",
+                                     f"Índice de subcategoría {subcategoria_idx} fuera de rango. Subcategorías disponibles: {self.subcategoria_ids}")
+                return
+            subcategoria_id = self.subcategoria_ids[subcategoria_idx]
+
+            # Obtener valores del formulario
             nombre = self.nombre_entry.get().strip()
             descripcion = self.descripcion_entry.get().strip() or None
-            subcategoria_id = self.subcategoria_ids[self.subcategoria_cb.current()]
             cantidad = int(self.cantidad_entry.get())
             precio = float(self.precio_entry.get())
-            ubicacion_id = self.ubicacion_ids[self.ubicacion_cb.current()]
 
-            # Llamar al controlador
+            # Llamar al controlador para agregar el producto
             success, message = self.controller.agregar_producto(
                 nombre=nombre,
                 descripcion=descripcion,
@@ -353,8 +387,7 @@ class InventarioView:
                 cantidad=cantidad,
                 precio=precio,
                 ubicacion=ubicacion_id,
-                fecha=None,
-                producto_id=id_producto  # Puede ser None (autogenerado) o un ID manual
+                fecha=None
             )
 
             if success:
@@ -364,9 +397,10 @@ class InventarioView:
             else:
                 messagebox.showerror("Error", message)
 
-        except ValueError:
-            messagebox.showerror("Error", "El ID debe ser un número entero (o vacío para autogenerar)")
+        except ValueError as e:
+            messagebox.showerror("Error", f"Valores numéricos inválidos: {str(e)}")
         except Exception as e:
+            print(f"Error al agregar producto: {str(e)}")
             messagebox.showerror("Error", f"Error al agregar: {str(e)}")
 
     def actualizar_producto(self):
